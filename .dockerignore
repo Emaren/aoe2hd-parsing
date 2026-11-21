@@ -40,3 +40,7 @@ sync_firebase_users.py
 utils/auth_utils.py
 scripts/list_firebase_users.py
 scripts/delete_firebase_users.py
+
+# macOS AppleDouble binary metadata are not source and cannot be imported.
+._*
+**/._*
