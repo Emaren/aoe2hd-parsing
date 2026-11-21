@@ -11,24 +11,17 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from alembic import context
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy import create_engine
-from dotenv import load_dotenv
-
 from db.models import Base  # now resolvable after sys.path fix
+from db.tls_contract import asyncpg_connection_options, sync_postgres_connection_options
 
-# Load .env if it exists
-dotenv_path = pathlib.Path(__file__).parent.parent / ".env"
-if dotenv_path.exists():
-    load_dotenv(dotenv_path)
-
-# Resolve database URL from Alembic CLI args, config.json, env, or fallback
-cli_args = context.get_x_argument(as_dictionary=True)
-DB_URL = (
-    context.get_x_argument(as_dictionary=True).get("db_url")
-    or os.getenv("DATABASE_URL")
-)
+# Do not hydrate credentials from tracked dotenv or argv; this executor requires
+# the protected environment supplied by the separately authorized operator.
+DB_URL = os.getenv("DATABASE_URL")
 
 if not DB_URL:
-    raise RuntimeError("❌ DATABASE_URL is not set. Failing migration.")
+    raise RuntimeError("PARSER_DATABASE_URL_REQUIRED")
+if DB_URL.startswith("postgres://"):
+    DB_URL = "postgresql+asyncpg://" + DB_URL[len("postgres://"):]
 
 # Alembic config object
 config = context.config
@@ -53,17 +46,26 @@ def do_run_migrations(sync_connection):
     context.run_migrations()
 
 async def run_migrations_online():
-    # Set the URL for Alembic’s config before doing anything
-    config.set_main_option("sqlalchemy.url", DB_URL)
-
-    if DB_URL.startswith("postgresql+asyncpg"):
-        connectable: AsyncEngine = create_async_engine(DB_URL, future=True)
-        async with connectable.begin() as conn:
-            await conn.run_sync(do_run_migrations)
+    # Never copy a credential-bearing URL into the Alembic config/logging.
+    # Alembic runs before uvicorn; it must enforce the same TLS policy as db/db.py.
+    if DB_URL.startswith("postgresql+asyncpg://"):
+        connectable: AsyncEngine = create_async_engine(
+            DB_URL, future=True, connect_args=asyncpg_connection_options(DB_URL)
+        )
+        try:
+            async with connectable.begin() as conn:
+                await conn.run_sync(do_run_migrations)
+        finally:
+            await connectable.dispose()
     else:
-        connectable = create_engine(DB_URL, future=True)
-        with connectable.begin() as conn:
-            do_run_migrations(conn)
+        connectable = create_engine(
+            DB_URL, future=True, connect_args=sync_postgres_connection_options(DB_URL)
+        )
+        try:
+            with connectable.begin() as conn:
+                do_run_migrations(conn)
+        finally:
+            connectable.dispose()
 
 
 def run_async():

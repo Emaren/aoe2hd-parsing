@@ -1,29 +1,27 @@
-# Ignore node modules and lock files
-node_modules
-npm-debug.log
-yarn-error.log
-pnpm-lock.yaml
+# Deny-by-default context: only the Python parser API can be built.
+# Unlike a list of known secrets, this also rejects unknown future secrets.
+**
+!Dockerfile
+!requirements.txt
+!app.py
+!config.py
+!db/
+!db/*.py
+!db/models/
+!db/models/*.py
+!routes/
+!routes/*.py
 
-# Ignore version control
-.git
-.gitignore
-
-# Ignore Docker files
-Dockerfile
-.dockerignore
-
-# Ignore system and editor files
-*.swp
-*.swo
-*.DS_Store
-.vscode
-.idea
-
-# Ignore build artifacts
-.next
-dist
-build
-
-# Ignore env files (optional if you're mounting them manually)
-.env
-.env.local
+# Never allow macOS metadata, credential files, scripts, SQL dumps or caches.
+**/._*
+**/.DS_Store
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*
+**/serviceAccountKey*.json
+**/*firebase*key*.json
+**/*.sql
+**/sync_firebase_users.py
+**/firebase_utils.py
+**/utils/auth_utils.py

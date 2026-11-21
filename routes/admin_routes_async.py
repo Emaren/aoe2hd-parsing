@@ -6,6 +6,7 @@ from db.db import get_async_session
 from datetime import datetime
 from sqlalchemy import desc
 import os
+import secrets
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -14,16 +15,26 @@ router = APIRouter(prefix="/api/admin", tags=["Admin"])
 # ───────────────────────────────────────────────
 def verify_admin_token(
     authorization: str = Header(None),
-    x_admin_token: str = Header(None, alias="X-Admin-Token"),
+    x_admin_token: str = Header(None, alias="x-admin-token"),
 ):
-    token = x_admin_token or (authorization.replace("Bearer ", "") if authorization else "")
-    expected = os.getenv("ADMIN_TOKEN", "secretadmin")
-    if token != expected:
+    """Require an explicitly provisioned server-side credential for admin access.
+
+    There must be no built-in fallback credential: a missing configuration fails
+    closed instead of treating a public source literal as the admin secret.
+    """
+    expected = os.getenv("ADMIN_TOKEN")
+    if not expected or not expected.strip():
+        raise HTTPException(status_code=503, detail="Admin authentication unavailable")
+
+    token = x_admin_token
+    if not token and authorization:
+        scheme, separator, value = authorization.partition(" ")
+        if scheme.lower() == "bearer" and separator:
+            token = value.strip()
+
+    if not token or len(token) > 512 or not secrets.compare_digest(token, expected):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-# ───────────────────────────────────────────────
-# 👥 List All Users
-# ───────────────────────────────────────────────
 @router.get("/users")
 async def list_users(
     authorization: str = Header(None),
@@ -41,8 +52,11 @@ async def list_users(
 @router.post("/user/online")
 async def mark_user_online(
     payload: dict = Body(...),
-    session: AsyncSession = Depends(get_async_session)
+    authorization: str = Header(None),
+    x_admin_token: str = Header(None, alias="X-Admin-Token"),
+    session: AsyncSession = Depends(get_async_session),
 ):
+    verify_admin_token(authorization, x_admin_token)
     uid = payload.get("uid")
     if not uid:
         raise HTTPException(status_code=400, detail="Missing UID")

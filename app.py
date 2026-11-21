@@ -9,12 +9,11 @@ import os
 
 from db.db import init_db_async, get_db
 from db.models import GameStats
-from firebase_utils import initialize_firebase
 
 # ✅ Routes
 from routes import (
-    user_me,
     user_routes_async,
+    user_me,
     user_register,
     replay_routes_async,
     debug_routes_async,
@@ -25,16 +24,12 @@ from routes import (
     traffic_route,
 )
 
-print(f"DATABASE_URL: {os.getenv('DATABASE_URL')}")
+print("DATABASE_URL configured:", bool(os.getenv("DATABASE_URL")))
 
 class LogRequestMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        print(f"📩 Incoming Request: {request.method} {request.url}")
-        if "authorization" in request.headers:
-            token_preview = request.headers["authorization"][:40]
-            print(f"🔑 Auth Header (first 40 chars): {token_preview}...")
-        else:
-            print("⚠️ No Authorization header present.")
+        # Avoid recording authorization headers, token prefixes or query strings.
+        print("Request method:", request.method)
         return await call_next(request)
 
 app = FastAPI()
@@ -59,12 +54,12 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    initialize_firebase()
     await init_db_async()
     for route in app.routes:
         print(f"✅ {route.path}")
 
 app.include_router(user_routes_async.router)
+app.include_router(user_me.router)
 app.include_router(user_register.router)
 app.include_router(replay_routes_async.router)
 app.include_router(debug_routes_async.router)

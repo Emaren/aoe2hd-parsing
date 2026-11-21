@@ -3,39 +3,24 @@ import os
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-env_loaded = False
 
-# Get ENV early
-ENV = os.getenv("ENV", os.getenv("RENDER", False) and "production" or "development")
-
-# ✅ 1. Prefer .env.override only in development
-override_path = os.path.join(BASE_DIR, ".env.override")
-if ENV != "production" and os.path.exists(override_path):
-    load_dotenv(dotenv_path=override_path)
-    env_loaded = True
-    print("✅ Loaded override from .env.override (dev only)")
-
-# ✅ 2. Load env-specific file (production/dev/etc)
-if not env_loaded:
-    env_file = (
-        ".env.production" if ENV == "production"
-        else ".env.dev" if ENV == "dev"
-        else ".env.fastdev" if ENV == "fastdev"
-        else ".env"
-    )
-    env_path = os.path.join(BASE_DIR, env_file)
-    if os.path.exists(env_path):
-        load_dotenv(dotenv_path=env_path)
-        env_loaded = True
-        print(f"✅ Loaded environment: {ENV} from {env_file}")
-    else:
-        print(f"⚠️ No env file found for {ENV}. Proceeding with defaults.")
-
-# ✅ 3. Load .env.local last, but only in dev mode
-local_path = os.path.join(BASE_DIR, ".env.local")
-if ENV == "development" and os.path.exists(local_path):
-    load_dotenv(dotenv_path=local_path, override=True)
-    print("✅ Loaded .env.local (final override layer for dev)")
+# Production and CI NEVER load committed dotenv files; injected environment
+# variables are the only credential authority. Even a developer's production
+# ENV flag must not select the historically tracked .env.production.
+ENV = (os.getenv("ENV") or ("production" if os.getenv("RENDER_SERVICE_ID") else "development")).casefold()
+is_managed_runtime = bool(os.getenv("RENDER_SERVICE_ID") or os.getenv("RENDER"))
+allow_dev_dotenv = (
+    os.getenv("PARSER_ALLOW_LOCAL_DOTENV") == "true"
+    and ENV in {"development", "dev", "fastdev", "test"}
+    and not is_managed_runtime
+)
+if allow_dev_dotenv:
+    from dotenv import load_dotenv
+    # Deliberate local-only opt-in; no .env.production or .env.render fallback.
+    for name in (".env.override", ".env.dev", ".env.fastdev", ".env.local", ".env"):
+        path = os.path.join(BASE_DIR, name)
+        if os.path.isfile(path):
+            load_dotenv(dotenv_path=path, override=False)
 
 # --- Exports ---
 def get_fastapi_api_url():
@@ -60,6 +45,5 @@ def load_config():
         raise RuntimeError(f"❌ Failed to load config.json: {e}")
 
 # ✅ Debug print
-print(f"🚀 ENV is: {ENV}")
-print(f"🌐 FASTAPI_API_URL is: {os.getenv('FASTAPI_API_URL')}")
-print(f"🐘 DATABASE_URL: {os.getenv('DATABASE_URL')}")
+print("PARSER_RUNTIME_CONFIG_INJECTED_ONLY", not allow_dev_dotenv)
+print("PARSER_DATABASE_URL_CONFIGURED", bool(os.getenv("DATABASE_URL")))

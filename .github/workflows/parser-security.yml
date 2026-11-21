@@ -1,0 +1,92 @@
+name: Parser security contracts
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parser-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install production dependencies without Firebase
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install 'httpx>=0.27,<1'
+      - name: Static auth, Firebase retirement and TLS regressions
+        run: |
+          for testfile in test_admin_auth_fail_closed.py test_postgres_tls_contract.py test_firebase_retirement.py test_production_config_fail_closed.py; do
+            python -m unittest discover -s tests -p "$testfile" -v
+          done
+      - name: Syntax qualify actual Python source (ignore tracked AppleDouble metadata)
+        run: |
+          python - <<'PY'
+          import pathlib
+          import py_compile
+          root = pathlib.Path(".")
+          count = 0
+          for folder in ("db", "migrations", "routes", "tests"):
+              for file in (root / folder).rglob("*.py"):
+                  if file.name.startswith("._"):
+                      continue
+                  py_compile.compile(str(file), doraise=True)
+                  count += 1
+          for file in ("app.py", "config.py"):
+              py_compile.compile(file, doraise=True)
+              count += 1
+          print("PARSER_REAL_PYTHON_SYNTAX_PASS", count)
+          PY
+      - name: Runtime import and no-auth legacy route denial
+        env:
+          ENV: production
+          DATABASE_URL: postgresql+asyncpg://ci-identity@127.0.0.1:5432/nonexistent_test_db
+        run: |
+          python - <<'PY'
+          import sys
+          from fastapi.testclient import TestClient
+          from app import app
+          assert 'firebase_admin' not in sys.modules
+          client = TestClient(app)
+          def require(method, path, expected):
+              result = getattr(client, method)(path, **({'json': {}} if method == 'post' else {}))
+              print('PARSER_SECURITY_HTTP', method.upper(), path, result.status_code)
+              assert result.status_code == expected, (method, path, result.status_code, expected)
+          require('get', '/', 200)
+          require('get', '/api/user/me', 410)
+          for path in ('/api/user/me', '/api/user/update_name', '/api/user/update_wallet'):
+              require('post', path, 410)
+          require('get', '/api/traffic', 503)
+          assert 'firebase_admin' not in sys.modules
+          print('PARSER_RUNTIME_IMPORT_AND_LEGACY_DENIAL_PASS')
+          PY
+      - name: Docker image must exclude all historical secret-bearing artifacts
+        run: |
+          docker build --tag parser-security-ci:${GITHUB_SHA} .
+          docker run --rm --entrypoint python \
+            -e ENV=production \
+            -e DATABASE_URL=postgresql+asyncpg://ci-identity@127.0.0.1:5432/test_db \
+            parser-security-ci:${GITHUB_SHA} -c '
+          from pathlib import Path
+          import importlib.util
+          root = Path("/app")
+          for name in (".env", ".env.production", ".env.render", ".env.override",
+                       "sync_firebase_users.py", "firebase_utils.py",
+                       "serviceAccountKey.json", "docker-compose.prod.yml",
+                       "scripts/push_and_deploy.sh", "db/data.sql",
+                       "db/schema.sql", ".git", "migrations"):
+              assert not (root / name).exists(), name
+          assert importlib.util.find_spec("firebase_admin") is None
+          from app import app
+          assert app
+          print("PARSER_IMAGE_SECRET_ABSENCE_AND_IMPORT_PASS")
+          '
