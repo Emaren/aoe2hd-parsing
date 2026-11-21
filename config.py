@@ -62,4 +62,4 @@ def load_config():
 # ✅ Debug print
 print(f"🚀 ENV is: {ENV}")
 print(f"🌐 FASTAPI_API_URL is: {os.getenv('FASTAPI_API_URL')}")
-print(f"🐘 DATABASE_URL: {os.getenv('DATABASE_URL')}")
+print("🐘 DATABASE_URL configured:", bool(os.getenv("DATABASE_URL")))
