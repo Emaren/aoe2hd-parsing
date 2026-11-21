@@ -52,8 +52,11 @@ async def list_users(
 @router.post("/user/online")
 async def mark_user_online(
     payload: dict = Body(...),
-    session: AsyncSession = Depends(get_async_session)
+    authorization: str = Header(None),
+    x_admin_token: str = Header(None, alias="X-Admin-Token"),
+    session: AsyncSession = Depends(get_async_session),
 ):
+    verify_admin_token(authorization, x_admin_token)
     uid = payload.get("uid")
     if not uid:
         raise HTTPException(status_code=400, detail="Missing UID")
