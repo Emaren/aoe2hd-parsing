@@ -90,15 +90,20 @@ class FirebaseRetirementContract(unittest.TestCase):
         requirements = content("requirements.txt").casefold()
         self.assertNotIn("firebase-admin", requirements)
 
-    def test_old_identity_script_and_key_excluded_from_image(self):
-        dockerignore = content(".dockerignore")
-        for forbidden in (
-            ".env.*", "serviceAccountKey.json", "sync_firebase_users.py",
-            "firebase_utils.py", "utils/auth_utils.py",
-            "scripts/delete_firebase_users.py",
-        ):
-            with self.subTest(forbidden=forbidden):
-                self.assertIn(forbidden, dockerignore)
+    def test_docker_context_uses_allowlist_instead_of_legacy_secret_denylist(self):
+        dockerignore = content(".dockerignore").splitlines()
+        self.assertIn("**", dockerignore, "Deny all build context by default")
+        permitted = {entry for entry in dockerignore if entry.startswith("!")}
+        self.assertEqual(
+            permitted,
+            {"!Dockerfile", "!requirements.txt", "!app.py", "!config.py",
+             "!db/", "!db/*.py", "!db/models/", "!db/models/*.py",
+             "!routes/", "!routes/*.py"},
+        )
+        for name in ("**/.env.*", "**/serviceAccountKey*.json",
+                     "**/sync_firebase_users.py", "**/*.sql", "**/._*"):
+            self.assertIn(name, dockerignore)
+        # Docker image-level CI also verifies absent files after actual build.
 
     def test_no_unreviewed_migrations_during_http_boot(self):
         dockerfile = content("Dockerfile")
