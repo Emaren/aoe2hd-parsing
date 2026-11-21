@@ -57,8 +57,16 @@ async def init_db_async():
                 await conn.execute(text("SELECT 1"))
             logging.info("Parser database read-only startup check completed.")
             return
-        except asyncpg.exceptions.ConnectionDoesNotExistError as e:
-            logging.warning(f"🔁 Retry DB connection ({attempt + 1}/{retries})...")
+        except asyncpg.exceptions.ConnectionDoesNotExistError:
+            # Never report successful startup after an exhausted DB retry budget.
+            # Do not include exception text: provider errors can contain secrets.
+            logging.warning(
+                "Parser database connection dropped (%d/%d)",
+                attempt + 1,
+                retries,
+            )
+            if attempt + 1 == retries:
+                raise RuntimeError("PARSER_DB_STARTUP_RETRIES_EXHAUSTED") from None
             await asyncio.sleep(2)
         except Exception as e:
             logging.error("Parser database initialization failed: %s", type(e).__name__)
