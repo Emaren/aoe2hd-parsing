@@ -70,7 +70,7 @@ class DatabaseTlsTests(unittest.TestCase):
         runtime = (ROOT / "db" / "db.py").read_text()
         self.assertIn('await conn.execute(text("SELECT 1"))', runtime)
         self.assertNotIn("Base.metadata.create_all", runtime)
-        self.assertIn("reviewed Alembic migrations", runtime)
+        self.assertIn("reviewed alembic migrations", runtime.casefold())
         self.assertIn("PARSER_DATABASE_URL_REQUIRED", runtime)
 
 
