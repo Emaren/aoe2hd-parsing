@@ -1,30 +1,32 @@
 # db/db.py
 import os
-import ssl
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy import text
+from db.tls_contract import asyncpg_connection_options
 from sqlalchemy.orm import sessionmaker
 import config  # triggers layered .env loading and debug output
 
 # ────────────────────────────────────────────────────────────────
 # 🛠 Fix DATABASE_URL scheme if Render injects 'postgres://'
 # ────────────────────────────────────────────────────────────────
-raw_url = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://aoe2hd_user:aoe2hd_pass@localhost:5432/aoe2hd_db"
-).strip()
+raw_url = (os.getenv("DATABASE_URL") or "").strip()
+if not raw_url:
+    raise RuntimeError("PARSER_DATABASE_URL_REQUIRED")
 
 if raw_url.startswith("postgres://"):
-    raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    raw_url = "postgresql+asyncpg://" + raw_url[len("postgres://"):]
+elif raw_url.startswith("postgresql://"):
+    raw_url = "postgresql+asyncpg://" + raw_url[len("postgresql://"):]
+if not raw_url.startswith("postgresql+asyncpg://"):
+    raise RuntimeError("PARSER_ASYNC_DATABASE_DRIVER_REQUIRED")
 
 DATABASE_URL = raw_url
 
 # ────────────────────────────────────────────────────────────────
 # 🌐 SSL Context for Remote DB
 # ────────────────────────────────────────────────────────────────
-connect_args = {}
-if "localhost" not in DATABASE_URL and "127.0.0.1" not in DATABASE_URL:
-    connect_args["ssl"] = ssl.create_default_context()
+connect_args = asyncpg_connection_options(DATABASE_URL)
 
 # ────────────────────────────────────────────────────────────────
 # 🚀 SQLAlchemy Async Engine + Session
@@ -51,14 +53,19 @@ async def init_db_async():
     for attempt in range(retries):
         try:
             async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-            logging.info("✅ Async tables created.")
+                # Production schemas are managed by reviewed Alembic migrations.
+                # Startup must not silently create or alter database objects.
+                if os.getenv("ENV", "").casefold() in {"production", "prod"}:
+                    await conn.execute(text("SELECT 1"))
+                else:
+                    await conn.run_sync(Base.metadata.create_all)
+            logging.info("Parser database startup check completed.")
             return
         except asyncpg.exceptions.ConnectionDoesNotExistError as e:
             logging.warning(f"🔁 Retry DB connection ({attempt + 1}/{retries})...")
             await asyncio.sleep(2)
         except Exception as e:
-            logging.error(f"❌ DB init failed: {e}")
+            logging.error("Parser database initialization failed: %s", type(e).__name__)
             raise
 
 # ────────────────────────────────────────────────────────────────
