@@ -27,3 +27,8 @@ build
 # Ignore env files (optional if you're mounting them manually)
 .env
 .env.local
+
+# Never place committed historical runtime env material into a container image.
+.env.*
+!.env.template
+!.env.example
