@@ -57,12 +57,15 @@ jobs:
           from app import app
           assert 'firebase_admin' not in sys.modules
           client = TestClient(app)
-          assert client.get('/').status_code == 200
-          for path in ('/api/user/me',):
-              assert client.get(path).status_code == 410, path
+          def require(method, path, expected):
+              result = getattr(client, method)(path, **({'json': {}} if method == 'post' else {}))
+              print('PARSER_SECURITY_HTTP', method.upper(), path, result.status_code)
+              assert result.status_code == expected, (method, path, result.status_code, expected)
+          require('get', '/', 200)
+          require('get', '/api/user/me', 410)
           for path in ('/api/user/me', '/api/user/update_name', '/api/user/update_wallet'):
-              assert client.post(path, json={}).status_code == 410, path
-          assert client.get('/api/traffic').status_code == 503
+              require('post', path, 410)
+          require('get', '/api/traffic', 503)
           assert 'firebase_admin' not in sys.modules
           print('PARSER_RUNTIME_IMPORT_AND_LEGACY_DENIAL_PASS')
           PY
