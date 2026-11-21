@@ -20,3 +20,7 @@ scripts/ip_country.json
 .env.*
 !.env.template
 !.env.example
+
+# Prevent new tracked AppleDouble metadata (legacy 163 blobs need separate retirement).
+._*
+**/._*
