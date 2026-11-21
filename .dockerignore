@@ -30,3 +30,13 @@ build
 
 # Never place committed historical runtime env material into a container image.
 .env.*
+
+# Obsolete Firebase key material and standalone admin tooling must never
+# enter the parser container, even if tracked in historical Git commits.
+serviceAccountKey.json
+serviceAccountKey*.json
+firebase_utils.py
+sync_firebase_users.py
+utils/auth_utils.py
+scripts/list_firebase_users.py
+scripts/delete_firebase_users.py
