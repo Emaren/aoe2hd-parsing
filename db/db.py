@@ -48,18 +48,14 @@ import asyncpg
 import asyncio
 
 async def init_db_async():
-    from db.models import Base
     retries = 5
     for attempt in range(retries):
         try:
+            # Web startup is deliberately read-only in EVERY environment.
+            # Reviewed Alembic migrations are a separate, explicitly authorized action.
             async with engine.begin() as conn:
-                # Production schemas are managed by reviewed Alembic migrations.
-                # Startup must not silently create or alter database objects.
-                if os.getenv("ENV", "").casefold() in {"production", "prod"}:
-                    await conn.execute(text("SELECT 1"))
-                else:
-                    await conn.run_sync(Base.metadata.create_all)
-            logging.info("Parser database startup check completed.")
+                await conn.execute(text("SELECT 1"))
+            logging.info("Parser database read-only startup check completed.")
             return
         except asyncpg.exceptions.ConnectionDoesNotExistError as e:
             logging.warning(f"🔁 Retry DB connection ({attempt + 1}/{retries})...")
