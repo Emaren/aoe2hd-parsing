@@ -12,7 +12,7 @@ permissions:
 jobs:
   parser-security:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -69,3 +69,24 @@ jobs:
           assert 'firebase_admin' not in sys.modules
           print('PARSER_RUNTIME_IMPORT_AND_LEGACY_DENIAL_PASS')
           PY
+      - name: Docker image must exclude all historical secret-bearing artifacts
+        run: |
+          docker build --tag parser-security-ci:${GITHUB_SHA} .
+          docker run --rm --entrypoint python \
+            -e ENV=production \
+            -e DATABASE_URL=postgresql+asyncpg://ci-identity@127.0.0.1:5432/test_db \
+            parser-security-ci:${GITHUB_SHA} -c '
+          from pathlib import Path
+          import importlib.util
+          root = Path("/app")
+          for name in (".env", ".env.production", ".env.render", ".env.override",
+                       "sync_firebase_users.py", "firebase_utils.py",
+                       "serviceAccountKey.json", "docker-compose.prod.yml",
+                       "scripts/push_and_deploy.sh", "db/data.sql",
+                       "db/schema.sql", ".git", "migrations"):
+              assert not (root / name).exists(), name
+          assert importlib.util.find_spec("firebase_admin") is None
+          from app import app
+          assert app
+          print("PARSER_IMAGE_SECRET_ABSENCE_AND_IMPORT_PASS")
+          '
