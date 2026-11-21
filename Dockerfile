@@ -18,4 +18,5 @@ RUN apt-get update && \
 
 EXPOSE 8000
 
-ENTRYPOINT ["sh", "-c", "alembic upgrade head && exec uvicorn app:app --host 0.0.0.0 --port 8000"]
+# Schema changes require a distinct reviewed migration, never an implicit web boot.
+ENTRYPOINT ["sh", "-c", "exec uvicorn app:app --host 0.0.0.0 --port 8000"]
