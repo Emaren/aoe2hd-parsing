@@ -28,8 +28,24 @@ jobs:
           for testfile in test_admin_auth_fail_closed.py test_postgres_tls_contract.py test_firebase_retirement.py; do
             python -m unittest discover -s tests -p "$testfile" -v
           done
-      - name: Syntax qualify all application Python files
-        run: python -m compileall -q app.py config.py db migrations routes tests
+      - name: Syntax qualify actual Python source (ignore tracked AppleDouble metadata)
+        run: |
+          python - <<'PY'
+          import pathlib
+          import py_compile
+          root = pathlib.Path(".")
+          count = 0
+          for folder in ("db", "migrations", "routes", "tests"):
+              for file in (root / folder).rglob("*.py"):
+                  if file.name.startswith("._"):
+                      continue
+                  py_compile.compile(str(file), doraise=True)
+                  count += 1
+          for file in ("app.py", "config.py"):
+              py_compile.compile(file, doraise=True)
+              count += 1
+          print("PARSER_REAL_PYTHON_SYNTAX_PASS", count)
+          PY
       - name: Runtime import and no-auth legacy route denial
         env:
           ENV: production
