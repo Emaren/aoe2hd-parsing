@@ -25,16 +25,12 @@ from routes import (
     traffic_route,
 )
 
-print(f"DATABASE_URL: {os.getenv('DATABASE_URL')}")
+print("DATABASE_URL configured:", bool(os.getenv("DATABASE_URL")))
 
 class LogRequestMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        print(f"📩 Incoming Request: {request.method} {request.url}")
-        if "authorization" in request.headers:
-            token_preview = request.headers["authorization"][:40]
-            print(f"🔑 Auth Header (first 40 chars): {token_preview}...")
-        else:
-            print("⚠️ No Authorization header present.")
+        # Avoid recording authorization headers, token prefixes or query strings.
+        print("Request method:", request.method)
         return await call_next(request)
 
 app = FastAPI()
