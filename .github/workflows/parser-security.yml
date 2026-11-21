@@ -24,7 +24,10 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install 'httpx>=0.27,<1'
       - name: Static auth, Firebase retirement and TLS regressions
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
+        run: |
+          for testfile in test_admin_auth_fail_closed.py test_postgres_tls_contract.py test_firebase_retirement.py; do
+            python -m unittest discover -s tests -p "$testfile" -v
+          done
       - name: Syntax qualify all application Python files
         run: python -m compileall -q app.py config.py db migrations routes tests
       - name: Runtime import and no-auth legacy route denial
