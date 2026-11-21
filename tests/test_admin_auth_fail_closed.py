@@ -86,5 +86,33 @@ class AdminAuthenticationTests(unittest.TestCase):
             self.assertEqual(ctx.exception.status_code, 401)
 
 
+    def test_all_admin_routes_require_auth_before_mutation(self):
+        route = Path(__file__).resolve().parents[1] / "routes" / "admin_routes_async.py"
+        tree = ast.parse(route.read_text(encoding="utf-8"), filename=str(route))
+        handlers = []
+        for node in tree.body:
+            if not isinstance(node, ast.AsyncFunctionDef):
+                continue
+            decorated = any(
+                isinstance(dec, ast.Call)
+                and isinstance(dec.func, ast.Attribute)
+                and isinstance(dec.func.value, ast.Name)
+                and dec.func.value.id == "router"
+                and dec.func.attr in {"get", "post", "put", "patch", "delete"}
+                for dec in node.decorator_list
+            )
+            if decorated:
+                handlers.append(node)
+                self.assertTrue(node.body, node.name)
+                first = node.body[0]
+                self.assertIsInstance(first, ast.Expr, node.name)
+                self.assertIsInstance(first.value, ast.Call, node.name)
+                self.assertIsInstance(first.value.func, ast.Name, node.name)
+                self.assertEqual(first.value.func.id, "verify_admin_token", node.name)
+                parameters = {arg.arg for arg in node.args.args}
+                self.assertTrue({"authorization", "x_admin_token"} <= parameters, node.name)
+        self.assertGreaterEqual(len(handlers), 3, "Must inspect every admin handler")
+
+
 if __name__ == "__main__":
     unittest.main()
