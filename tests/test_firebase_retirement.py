@@ -112,5 +112,30 @@ class FirebaseRetirementContract(unittest.TestCase):
         self.assertNotIn("auth.verify_id_token", content("app.py"))
 
 
+    def test_delete_all_is_permanently_retired(self):
+        debug = content("routes/debug_routes_async.py")
+        self.assertIn('async def delete_all():', debug)
+        self.assertIn('raise HTTPException(status_code=410', debug)
+        self.assertNotIn("delete(GameStats)", debug)
+        self.assertNotIn("delete(User)", debug)
+        self.assertNotIn("ENABLE_DEV_ENDPOINTS", debug)
+
+    def test_legacy_betting_has_no_financial_mutation_authority(self):
+        source = content("routes/bets.py")
+        self.assertIn("Legacy demo betting disabled", source)
+        self.assertNotIn("bets = {}", source)
+        self.assertNotIn('"Bet accepted!"', source)
+        self.assertNotIn('"Bet created!"', source)
+        self.assertIn("_financial_unavailable()", source)
+
+    def test_old_writers_retain_a_fail_closed_dependency(self):
+        for file in ("routes/user_register.py", "routes/user_ping.py",
+                     "routes/replay_routes_async.py"):
+            with self.subTest(file=file):
+                source = content(file)
+                self.assertIn("from routes.user_me import get_current_user", source)
+                self.assertIn("Depends(get_current_user)", source)
+
+
 if __name__ == "__main__":
     unittest.main()
