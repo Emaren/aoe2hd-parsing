@@ -69,7 +69,8 @@ class DatabaseTlsTests(unittest.TestCase):
     def test_production_db_startup_never_implicitly_creates_tables(self):
         runtime = (ROOT / "db" / "db.py").read_text()
         self.assertIn('await conn.execute(text("SELECT 1"))', runtime)
-        self.assertIn('{"production", "prod"}', runtime)
+        self.assertNotIn("Base.metadata.create_all", runtime)
+        self.assertIn("reviewed Alembic migrations", runtime)
         self.assertIn("PARSER_DATABASE_URL_REQUIRED", runtime)
 
 
