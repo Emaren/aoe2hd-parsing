@@ -14,3 +14,9 @@ __pycache__/
 scripts/ip_timestamps.json
 scripts/ip_visit_counts.json
 scripts/ip_country.json
+
+# Runtime credentials are supplied by host/secret manager, never committed
+.env
+.env.*
+!.env.template
+!.env.example
