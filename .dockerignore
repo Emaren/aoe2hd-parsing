@@ -30,5 +30,3 @@ build
 
 # Never place committed historical runtime env material into a container image.
 .env.*
-!.env.template
-!.env.example
